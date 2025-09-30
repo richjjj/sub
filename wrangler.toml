@@ -5,11 +5,11 @@ compatibility_date = "2024-01-01"
 # KV 命名空间配置
 [[kv_namespaces]]
 binding = "SUBLINK_KV"
-id = "your-kv-namespace-id-here"
+id = "ba96accf3e9b45aca7445d173478315e"
 
 [[kv_namespaces]]
 binding = "TEMPLATE_CONFIG"
-id = "your-template-kv-namespace-id-here"
+id = "a4ad7466a262477d8acb9b1fcd9c205d"
 
 # 环境变量配置
 [vars]
