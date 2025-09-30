@@ -448,6 +448,7 @@ export function getHTML() {
                     <div class="result-url">
                         <input type="text" id="result-url" readonly>
                         <button class="copy-btn" onclick="copyUrl()">复制</button>
+                        <button class="copy-btn" onclick="showResultQRCode()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📱 二维码</button>
                     </div>
                 </div>
             </div>
@@ -616,6 +617,28 @@ export function getHTML() {
             <div class="btn-group">
                 <button class="btn btn-primary" onclick="createFixedSub()">创建</button>
                 <button class="btn btn-secondary" onclick="closeModal('add-fixed-sub-modal')">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 二维码显示模态框 -->
+    <div id="qrcode-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2>订阅二维码</h2>
+                <button class="modal-close" onclick="closeModal('qrcode-modal')">&times;</button>
+            </div>
+            <div style="text-align: center; padding: 20px;">
+                <div id="qrcode-container" style="background: white; padding: 20px; border-radius: 12px; display: inline-block;">
+                    <img id="qrcode-image" src="" alt="二维码" style="max-width: 100%; height: auto;">
+                </div>
+                <p style="color: #a8a8b8; margin-top: 15px; font-size: 13px; word-break: break-all;" id="qrcode-url"></p>
+                <p style="color: #ffa726; margin-top: 10px; font-size: 12px;">
+                    📱 使用客户端扫描二维码添加订阅
+                </p>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="closeModal('qrcode-modal')">关闭</button>
             </div>
         </div>
     </div>
@@ -1035,6 +1058,7 @@ overwrite_original_rules=true\`;
                         </div>
                     </div>
                     <div class="node-item-actions">
+                        <button class="btn btn-secondary" onclick="showQRCode('\${url}')" style="margin-right: 10px;">📱 二维码</button>
                         <button class="btn btn-secondary" onclick="copyFixedSubUrl('\${url}')" style="margin-right: 10px;">复制链接</button>
                         <button class="btn btn-danger" onclick="deleteFixedSub('\${sub.id}')">删除</button>
                     </div>
@@ -1145,6 +1169,24 @@ overwrite_original_rules=true\`;
                 updateFixedSubsList();
                 
                 alert('删除失败：' + error.message);
+            }
+        }
+
+        // 显示二维码
+        function showQRCode(url) {
+            // 使用免费的二维码 API 生成二维码
+            const qrcodeUrl = \`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=\${encodeURIComponent(url)}\`;
+            
+            document.getElementById('qrcode-image').src = qrcodeUrl;
+            document.getElementById('qrcode-url').textContent = url;
+            document.getElementById('qrcode-modal').classList.add('active');
+        }
+
+        // 显示生成结果的二维码
+        function showResultQRCode() {
+            const url = document.getElementById('result-url').value;
+            if (url) {
+                showQRCode(url);
             }
         }
     </script>
