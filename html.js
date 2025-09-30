@@ -1180,6 +1180,11 @@ export function getLoginHTML() {
                         >
                         <span class="password-toggle" onclick="togglePassword()">👁️</span>
                     </div>
+                    <p style="margin-top: 8px; font-size: 12px; color: #ffa726;">
+                        ⚠️ 默认密码：<code style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-family: monospace;">admin123456</code>
+                        <br>
+                        <span style="color: #a8a8b8; font-size: 11px;">请在 Cloudflare Dashboard 设置环境变量 ACCESS_PASSWORD 来修改密码</span>
+                    </p>
                 </div>
 
                 <button type="submit" class="login-btn" id="login-btn">

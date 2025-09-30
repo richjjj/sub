@@ -76,12 +76,17 @@ export default {
     }
 };
 
+// 默认密码（如果没有配置环境变量）
+const DEFAULT_PASSWORD = 'admin123456';
+
+// 获取有效密码
+function getPassword(env) {
+    return env.ACCESS_PASSWORD || DEFAULT_PASSWORD;
+}
+
 // 验证密码
 async function verifyAuth(request, env) {
-    // 如果没有设置密码，则不需要验证
-    if (!env.ACCESS_PASSWORD) {
-        return { authorized: true };
-    }
+    const password = getPassword(env);
 
     // 检查 Cookie
     const cookieHeader = request.headers.get('Cookie');
@@ -95,7 +100,7 @@ async function verifyAuth(request, env) {
                 const now = Date.now();
 
                 // 检查 token 是否过期
-                if (tokenData.expires > now && tokenData.password === env.ACCESS_PASSWORD) {
+                if (tokenData.expires > now && tokenData.password === password) {
                     return { authorized: true };
                 }
             } catch (e) {
@@ -111,17 +116,13 @@ async function verifyAuth(request, env) {
 async function handleLogin(request, env) {
     try {
         const body = await request.json();
-        const password = body.password;
+        const inputPassword = body.password;
+        const correctPassword = getPassword(env);
 
-        // 如果没有设置密码，任何密码都通过
-        if (!env.ACCESS_PASSWORD) {
-            return jsonResponse({ success: true, message: '未设置密码，直接登录' });
-        }
-
-        if (password === env.ACCESS_PASSWORD) {
+        if (inputPassword === correctPassword) {
             // 生成 token
             const tokenData = {
-                password: env.ACCESS_PASSWORD,
+                password: correctPassword,
                 expires: Date.now() + AUTH_TOKEN_EXPIRY
             };
             const token = btoa(JSON.stringify(tokenData));
