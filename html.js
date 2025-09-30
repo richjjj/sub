@@ -647,15 +647,30 @@ export function getHTML() {
                 const response = await fetch('/api/templates');
                 templates = await response.json();
                 
-                document.getElementById('template-count').textContent = templates.length;
+                // 总数包含内置模板
+                const totalCount = templates.length + 1;
+                document.getElementById('template-count').textContent = totalCount;
                 
                 // 更新模板选择下拉框
-                const selectHtml = '<option value="">默认模板</option>' + 
+                const selectHtml = '<option value="">Nano (内置默认)</option>' + 
                     templates.map(t => \`<option value="\${t.id}">\${t.name}</option>\`).join('');
                 document.getElementById('template-select').innerHTML = selectHtml;
                 
-                // 更新模板管理页面
-                const listHtml = templates.map(template => \`
+                // 更新模板管理页面 - 添加内置默认模板
+                const builtInTemplate = \`
+                    <div class="node-item" style="border-left: 3px solid #667eea;">
+                        <div class="node-item-info">
+                            <div class="node-item-title">🔧 Nano (内置默认)</div>
+                            <div class="node-item-desc">精简规则模板，支持自动选择和全球直连</div>
+                        </div>
+                        <div class="node-item-actions">
+                            <button class="btn btn-secondary" onclick="viewBuiltInTemplate()" style="margin-right: 10px;">查看</button>
+                            <span style="color: #a8a8b8; font-size: 12px;">系统内置</span>
+                        </div>
+                    </div>
+                \`;
+                
+                const userTemplates = templates.map(template => \`
                     <div class="node-item">
                         <div class="node-item-info">
                             <div class="node-item-title">\${template.name}</div>
@@ -668,7 +683,8 @@ export function getHTML() {
                     </div>
                 \`).join('');
                 
-                document.getElementById('templates-list').innerHTML = listHtml || '<div class="empty-state"><div class="empty-state-icon">📋</div><p>暂无模板</p></div>';
+                const listHtml = builtInTemplate + userTemplates;
+                document.getElementById('templates-list').innerHTML = listHtml;
             } catch (error) {
                 console.error('Failed to load templates:', error);
             }
@@ -756,6 +772,35 @@ export function getHTML() {
                 contentGroup.style.display = 'none';
                 urlGroup.style.display = 'block';
             }
+        }
+
+        // 查看内置默认模板
+        function viewBuiltInTemplate() {
+            const builtInContent = \`[custom]
+ruleset=🎯 全球直连,https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/LocalAreaNetwork.list
+ruleset=🎯 全球直连,https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/GoogleCN.list
+ruleset=🚀 节点选择,https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/ProxyLite.list
+ruleset=🎯 全球直连,https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/ChinaDomain.list
+ruleset=🎯 全球直连,https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/ChinaCompanyIp.list
+ruleset=🎯 全球直连,[]GEOIP,CN
+ruleset=🐟 漏网之鱼,[]FINAL
+
+custom_proxy_group=🚀 节点选择\\\`select\\\`[]♻️ 自动选择\\\`select\\\`.*
+custom_proxy_group=♻️ 自动选择\\\`url-test\\\`.*\\\`http://www.gstatic.com/generate_204\\\`300,,50
+custom_proxy_group=🎯 全球直连\\\`select\\\`[]DIRECT\\\`[]🚀 节点选择\\\`[]♻️ 自动选择
+custom_proxy_group=🐟 漏网之鱼\\\`select\\\`[]🚀 节点选择\\\`[]♻️ 自动选择\\\`[]DIRECT
+
+enable_rule_generator=true
+overwrite_original_rules=true\`;
+            
+            document.getElementById('view-template-title').textContent = 'Nano (内置默认)';
+            document.getElementById('view-template-desc').textContent = '精简规则模板，支持自动选择和全球直连';
+            
+            document.getElementById('view-template-content-group').style.display = 'block';
+            document.getElementById('view-template-url-group').style.display = 'none';
+            document.getElementById('view-template-content').value = builtInContent;
+            
+            document.getElementById('view-template-modal').classList.add('active');
         }
 
         // 查看模板详情

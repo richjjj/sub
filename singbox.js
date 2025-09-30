@@ -1,4 +1,5 @@
 import Parser from './parser.js';
+import { DEFAULT_RULE_TEMPLATE } from './rules.js';
 
 // 在文件顶部添加规则类型定义
 const RULE_TYPES = {
@@ -88,23 +89,18 @@ const BASE_CONFIG = {
     ]
 };
 
-// 设置默认模板URL和环境变量处理
-const getTemplateUrl = (env) => {
-    return env?.DEFAULT_TEMPLATE_URL || 'https://raw.githubusercontent.com/Troywww/singbox_conf/refs/heads/main/singbox_clash_conf.txt';
-};
-
 export async function handleSingboxRequest(request, env) {
     try {
         const url = new URL(request.url);
         const directUrl = url.searchParams.get('url');
-        const templateUrl = url.searchParams.get('template') || getTemplateUrl(env);
-        
+        const templateUrl = url.searchParams.get('template');
+
         // 检测用户平台
         const userAgent = request.headers.get('User-Agent') || '';
-        const isApplePlatform = userAgent.includes('iPhone') || 
-                               userAgent.includes('iPad') || 
-                               userAgent.includes('Macintosh') ||
-                               userAgent.includes('SFI/');
+        const isApplePlatform = userAgent.includes('iPhone') ||
+            userAgent.includes('iPad') ||
+            userAgent.includes('Macintosh') ||
+            userAgent.includes('SFI/');
 
         // 检查必需的URL参数
         let nodes = [];
@@ -119,19 +115,39 @@ export async function handleSingboxRequest(request, env) {
         }
 
         // 获取模板配置
-        const templateResponse = await fetch(templateUrl);
-        
-        // 检查是否是内部模板URL
         let templateContent;
-        if (templateUrl.startsWith('https://inner.template.secret/id-')) {
+
+        if (!templateUrl) {
+            // 没有提供模板，使用内置默认模板
+            console.log('Using built-in default template');
+            templateContent = DEFAULT_RULE_TEMPLATE;
+        } else if (templateUrl.startsWith('https://inner.template.secret/id-')) {
+            // 内部模板URL
+            console.log('Fetching internal template:', templateUrl);
             const templateId = templateUrl.replace('https://inner.template.secret/id-', '');
             const templateData = await env.TEMPLATE_CONFIG.get(templateId);
             if (!templateData) {
                 return new Response('Template not found', { status: 404 });
             }
             const templateInfo = JSON.parse(templateData);
-            templateContent = templateInfo.content;
+
+            // 如果模板有 URL，从远程获取
+            if (templateInfo.url) {
+                console.log('Fetching template from URL:', templateInfo.url);
+                const response = await fetch(templateInfo.url);
+                if (!response.ok) {
+                    return new Response('Failed to fetch remote template', { status: 500 });
+                }
+                templateContent = await response.text();
+            } else {
+                // 否则使用存储的内容
+                templateContent = templateInfo.content;
+            }
         } else {
+            // 外部模板URL
+            console.log('Fetching external template:', templateUrl);
+            const templateResponse = await fetch(templateUrl);
+
             if (!templateResponse.ok) {
                 return new Response('Failed to fetch template', { status: 500 });
             }
@@ -157,13 +173,13 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
         ...convertNodeToSingbox(node),
         tag: node.name // 确保保留原始名称作为tag
     }));
-    
+
     // 解析分组规则
     const groups = parseGroups(templateContent);
-    
+
     // 创建分组映射
     const groupOutbounds = {};
-    
+
     // 使用基础配置模板
     const config = {
         ...BASE_CONFIG,  // 展开基础配置
@@ -171,7 +187,7 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
             ...singboxNodes, // 直接使用转换好的节点
             ...Object.entries(groups).map(([name, group]) => {
                 const outboundsList = [];
-                
+
                 // 处理分组选项
                 group.patterns.forEach(option => {
                     if (option.startsWith('[]')) {
@@ -183,12 +199,12 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
                         outboundsList.push('direct');
                     } else if (option === 'REJECT') {
                         outboundsList.push('block');
-                    } else if (!option.includes('http')) { 
+                    } else if (!option.includes('http')) {
                         const matchedNodes = matchProxies(singboxNodes, option);
                         outboundsList.push(...matchedNodes.map(p => p.tag));
                     }
                 });
-  
+
                 return generateGroupOutbound(name, group, outboundsList);
             }),
             {
@@ -219,17 +235,17 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
     return config;
 }
 
-  // 解析分组规则
-  function parseGroups(template) {
+// 解析分组规则
+function parseGroups(template) {
     const groups = {};
     const lines = template.split('\n');
-    
+
     for (const line of lines) {
         if (line.startsWith('custom_proxy_group=')) {
             const [name, ...parts] = line.slice('custom_proxy_group='.length).split('`');
             const type = parts[0];
             const patterns = parts.slice(1).filter(p => p && !p.includes('http'));
-            
+
             groups[name] = {
                 type,
                 patterns,
@@ -246,12 +262,12 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
             };
         }
     }
-    
+
     return groups;
-  }
-  
-  // 对代理进行分组
-  function groupProxies(proxies, groups) {
+}
+
+// 对代理进行分组
+function groupProxies(proxies, groups) {
     if (!proxies || !Array.isArray(proxies)) {
         return {};
     }
@@ -261,7 +277,7 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
     }
 
     const result = {};
-    
+
     for (const [name, group] of Object.entries(groups)) {
         if (!group || !Array.isArray(group.filter)) {
             result[name] = [];
@@ -277,27 +293,27 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
                 if (!pattern) {
                     return false;
                 }
-                
+
                 if (pattern instanceof RegExp) {
                     return pattern.test(proxy.tag);
                 }
-                
+
                 if (typeof pattern === 'string') {
                     return proxy.tag.includes(pattern);
                 }
-                
+
                 return false;
             });
         });
     }
-    
-    return result;
-  }
-  
-  // 匹配代理节点
-  function matchProxies(proxies, pattern) {
 
-    
+    return result;
+}
+
+// 匹配代理节点
+function matchProxies(proxies, pattern) {
+
+
     // 安全检查
     if (!proxies || !pattern || pattern === 'DIRECT' || pattern.startsWith('[]')) {
         return [];
@@ -322,18 +338,18 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
                 return proxy.tag.indexOf(keyword) !== -1;
             });
             if (isExcluded) return false;
-            
+
             return include.length === 0 || include.some(keyword => {
                 if (!keyword) return false;
                 return proxy.tag.indexOf(keyword) !== -1;
             });
         });
         return result;
-    } 
+    }
     // 处理普通正则表达式模式
     else if (pattern.startsWith('(') && pattern.endsWith(')')) {
         const keywords = pattern.slice(1, -1).split('|');
-        const result = validProxies.filter(proxy => 
+        const result = validProxies.filter(proxy =>
             keywords.some(keyword => proxy.tag.indexOf(keyword) !== -1)
         );
         return result;
@@ -354,7 +370,7 @@ async function generateSingboxConfig(templateContent, proxies, isApplePlatform) 
         const result = validProxies.filter(proxy => proxy.tag.indexOf(pattern) !== -1);
         return result;
     }
-  }
+}
 
 // 修改 generateGroupOutbound 
 function generateGroupOutbound(name, group, outbounds) {
@@ -393,7 +409,7 @@ function generateGroupOutbound(name, group, outbounds) {
 // 修改节点转换函数
 function convertNodeToSingbox(node) {
     const tag = node.name || `${node.type}-${node.server}:${node.port}`;
-    
+
     switch (node.type) {
         case 'vmess':
             return {
@@ -601,15 +617,15 @@ async function generateRules(template, groupOutbounds, isApplePlatform) {
 
         const [group, ...urlParts] = line.slice('ruleset='.length).split(',');
         const url = urlParts.join(',');
-        
+
         // 确保 group 存在
         if (!group) {
             continue;
         }
 
         const outbound = group === 'DIRECT' ? 'direct' :
-                        group === 'REJECT' ? 'block' :
-                        group;
+            group === 'REJECT' ? 'block' :
+                group;
 
         if (url.startsWith('[]')) {
             const ruleContent = url.slice(2);
@@ -642,16 +658,16 @@ async function generateRules(template, groupOutbounds, isApplePlatform) {
                 if (!response.ok) {
                     continue;
                 }
-                
+
                 const ruleContent = await response.text();
-                
+
                 ruleContent.split('\n')
                     .map(rule => rule && rule.trim())
                     .filter(rule => rule && !rule.startsWith('#'))
                     .forEach(rule => {
                         const [type, ...valueParts] = rule.split(',');
                         const value = valueParts.join(',');
-                        
+
                         if (!type || !value) {
                             return;
                         }
@@ -677,7 +693,7 @@ async function generateRules(template, groupOutbounds, isApplePlatform) {
                                 break;
                         }
                     });
-                
+
                 for (const [type, values] of Object.entries(rulesByType)) {
                     if (values.size > 0) {
                         rules.push({

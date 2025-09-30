@@ -11,8 +11,4 @@ id = "ba96accf3e9b45aca7445d173478315e"
 binding = "TEMPLATE_CONFIG"
 id = "a4ad7466a262477d8acb9b1fcd9c205d"
 
-# 环境变量配置
-[vars]
-DEFAULT_TEMPLATE_URL = "https://raw.githubusercontent.com/juewuy/ShellCrash/refs/heads/dev/rules/ShellClash_Nano.ini"
-
 # 访问密码在 Cloudflare Dashboard 中配置，不要在这里写明文密码！

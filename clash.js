@@ -1,4 +1,5 @@
 import Parser from './parser.js';
+import { DEFAULT_RULE_TEMPLATE } from './rules.js';
 
 // 定义节点协议列表
 const NODE_PROTOCOLS = ['vless:', 'vmess:', 'trojan:', 'ss:', 'ssr:', 'hysteria:', 'tuic:', 'hy2:', 'hysteria2:'];
@@ -39,18 +40,12 @@ dns:
     - '*.battle.net'
 `;
 
-// 设置默认模板URL和环境变量处理
-const getTemplateUrl = (env) => {
-    return env?.DEFAULT_TEMPLATE_URL || 'https://raw.githubusercontent.com/Troywww/singbox_conf/refs/heads/main/singbox_clash_conf.txt';
-};
-
 export async function handleClashRequest(request, env) {
     try {
         const url = new URL(request.url);
         const directUrl = url.searchParams.get('url');
-        const templateUrl = url.searchParams.get('template') || getTemplateUrl(env);
-        console.log('Fetching template from:', templateUrl);
-        
+        const templateUrl = url.searchParams.get('template');
+
         // 检查必需的URL参数
         let nodes = [];
         if (directUrl) {
@@ -64,24 +59,44 @@ export async function handleClashRequest(request, env) {
         }
 
         // 获取模板配置
-        const templateResponse = await fetch(templateUrl);
-        console.log('Template response:', {
-            status: templateResponse.status,
-            contentType: templateResponse.headers.get('content-type'),
-            url: templateUrl
-        });
-        
-        // 检查是否是内部模板URL
         let templateContent;
-        if (templateUrl.startsWith('https://inner.template.secret/id-')) {
+
+        if (!templateUrl) {
+            // 没有提供模板，使用内置默认模板
+            console.log('Using built-in default template');
+            templateContent = DEFAULT_RULE_TEMPLATE;
+        } else if (templateUrl.startsWith('https://inner.template.secret/id-')) {
+            // 内部模板URL
+            console.log('Fetching internal template:', templateUrl);
             const templateId = templateUrl.replace('https://inner.template.secret/id-', '');
             const templateData = await env.TEMPLATE_CONFIG.get(templateId);
             if (!templateData) {
                 return new Response('Template not found', { status: 404 });
             }
             const templateInfo = JSON.parse(templateData);
-            templateContent = templateInfo.content;
+
+            // 如果模板有 URL，从远程获取
+            if (templateInfo.url) {
+                console.log('Fetching template from URL:', templateInfo.url);
+                const response = await fetch(templateInfo.url);
+                if (!response.ok) {
+                    return new Response('Failed to fetch remote template', { status: 500 });
+                }
+                templateContent = await response.text();
+            } else {
+                // 否则使用存储的内容
+                templateContent = templateInfo.content;
+            }
         } else {
+            // 外部模板URL
+            console.log('Fetching external template:', templateUrl);
+            const templateResponse = await fetch(templateUrl);
+            console.log('Template response:', {
+                status: templateResponse.status,
+                contentType: templateResponse.headers.get('content-type'),
+                url: templateUrl
+            });
+
             if (!templateResponse.ok) {
                 return new Response('Failed to fetch template', { status: 500 });
             }
@@ -105,15 +120,15 @@ export async function handleClashRequest(request, env) {
 
 async function generateClashConfig(templateContent, nodes) {
     let config = BASE_CONFIG + '\n';
-    
+
     // 添加代理节点
     config += 'proxies:\n';
-    
+
     const proxies = nodes.map(node => {
         const converted = convertNodeToClash(node);
         return converted;
     }).filter(Boolean);
-    
+
     proxies.forEach(proxy => {
         config += '  -';
         function writeValue(obj, indent = 4) {
@@ -121,14 +136,14 @@ async function generateClashConfig(templateContent, nodes) {
                 if (value === undefined || value === null) {
                     return;
                 }
-                
+
                 const spaces = ' '.repeat(indent);
                 if (typeof value === 'object') {
                     config += `\n${spaces}${key}:`;
                     writeValue(value, indent + 2);
                 } else {
-                    const formattedValue = typeof value === 'boolean' || typeof value === 'number' 
-                        ? value 
+                    const formattedValue = typeof value === 'boolean' || typeof value === 'number'
+                        ? value
                         : `"${value}"`;
                     config += `\n${spaces}${key}: ${formattedValue}`;
                 }
@@ -142,29 +157,29 @@ async function generateClashConfig(templateContent, nodes) {
     config += '\nproxy-groups:\n';
     const groupLines = templateContent.split('\n')
         .filter(line => line.startsWith('custom_proxy_group='));
-    
+
     groupLines.forEach(line => {
         const [groupName, ...rest] = line.slice('custom_proxy_group='.length).split('`');
         const groupType = rest[0];
         const options = rest.slice(1);
-        
+
         config += `  - name: "${groupName}"\n`;
         config += `    type: ${groupType === 'url-test' ? 'url-test' : 'select'}\n`;
-        
+
         // 处理 url-test 类型的特殊配置
         if (groupType === 'url-test') {
             const testUrl = options.find(opt => opt.startsWith('http')) || 'http://www.gstatic.com/generate_204';
             const interval = 300;
             const tolerance = groupName.includes('欧美') ? 150 : 50;
-            
+
             config += `    url: ${testUrl}\n`;
             config += `    interval: ${interval}\n`;
             config += `    tolerance: ${tolerance}\n`;
         }
-        
+
         config += '    proxies:\n';
         let hasProxies = false;
-        
+
         // 处理分组选项
         options.forEach(option => {
             if (option.startsWith('[]')) {
@@ -179,13 +194,13 @@ async function generateClashConfig(templateContent, nodes) {
                     let matchedCount = 0;
                     // 处理正则表达式过滤
                     let pattern = option;
-                    
+
                     // 处理否定查找
                     if (pattern.includes('(?!')) {
                         const [excludePattern, includePattern] = pattern.split(')).*$');
                         const exclude = excludePattern.substring(excludePattern.indexOf('.*(') + 3).split('|');
                         const include = includePattern ? includePattern.slice(1).split('|') : [];
-                        
+
                         // 添加调试日志
                         console.log('Pattern processing:', {
                             original: pattern,
@@ -193,23 +208,23 @@ async function generateClashConfig(templateContent, nodes) {
                             include,
                             includePattern
                         });
-                        
+
                         const matchedProxies = proxies.filter(proxy => {
-                            const isExcluded = exclude.some(keyword => 
+                            const isExcluded = exclude.some(keyword =>
                                 proxy.name.includes(keyword)
                             );
                             if (isExcluded) return false;
-                            
+
                             // 如果没有包含模式，则返回所有未被排除的节点
                             if (!includePattern || include.length === 0) {
                                 return true;
                             }
                             // 如果有包含模式，则需要匹配包含模式
-                            return include.some(keyword => 
+                            return include.some(keyword =>
                                 proxy.name.includes(keyword)
                             );
                         });
-                        
+
                         matchedProxies.forEach(proxy => {
                             hasProxies = true;
                             matchedCount++;
@@ -217,7 +232,7 @@ async function generateClashConfig(templateContent, nodes) {
                         });
                     } else {
                         const filter = new RegExp(pattern);
-                        const matchedProxies = proxies.filter(proxy => 
+                        const matchedProxies = proxies.filter(proxy =>
                             filter.test(proxy.name)
                         );
                         matchedProxies.forEach(proxy => {
@@ -243,17 +258,17 @@ async function generateClashConfig(templateContent, nodes) {
     const ruleLines = templateContent.split('\n')
         .filter(line => line.startsWith('ruleset='))
         .map(line => line.trim());
-    
+
     // 获取并解析所有规则列表
     for (const line of ruleLines) {
         const groupEndIndex = line.indexOf(',');
         const group = line.substring('ruleset='.length, groupEndIndex);
         const url = line.substring(groupEndIndex + 1);
-        
+
         if (url.startsWith('[]')) {
             // 处理内置规则
             const ruleContent = url.slice(2);
-            
+
             if (ruleContent === 'MATCH' || ruleContent === 'FINAL') {
                 config += `  - MATCH,${group}\n`;
             } else if (ruleContent.startsWith('GEOIP,')) {
@@ -269,24 +284,24 @@ async function generateClashConfig(templateContent, nodes) {
                     console.error(`Failed to fetch rules from ${url}: ${response.status}`);
                     continue;
                 }
-                
+
                 const ruleContent = await response.text();
                 const rules = ruleContent.split('\n')
                     .map(rule => rule.trim())
                     .filter(rule => rule && !rule.startsWith('#'));
-                
+
                 // 添加解析后的规则
                 rules.forEach(rule => {
                     if (rule.includes(',')) {
                         const parts = rule.split(',');
                         const ruleType = parts[0];
                         const ruleValue = parts[1];
-                        
+
                         // 跳过 USER-AGENT 和 URL-REGEX 规则
                         if (ruleType === 'USER-AGENT' || ruleType === 'URL-REGEX') {
                             return;
                         }
-                        
+
                         // 处理规则
                         if (ruleType === 'IP-CIDR' || ruleType === 'IP-CIDR6') {
                             config += `  - ${ruleType},${ruleValue},${group},no-resolve\n`;
@@ -345,7 +360,7 @@ function convertVmess(node) {
     // 网络设置
     if (node.settings.net) {
         config.network = node.settings.net;
-        
+
         // ws 配置
         if (node.settings.net === 'ws') {
             config['ws-opts'] = {
