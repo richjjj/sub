@@ -64,6 +64,10 @@ export default {
             return handleTemplatesAPI(request, env);
         }
 
+        if (path.startsWith('/api/templates/')) {
+            return handleTemplateDetailAPI(request, env);
+        }
+
         if (path === '/api/subscribe') {
             return handleSubscribeAPI(request, env);
         }
@@ -249,9 +253,16 @@ async function handleTemplatesAPI(request, env) {
         const templateData = {
             name: body.name,
             description: body.description,
-            content: body.content,
             createdAt: Date.now()
         };
+
+        // 支持保存 URL 或内容
+        if (body.url) {
+            templateData.url = body.url;
+        } else if (body.content) {
+            templateData.content = body.content;
+        }
+
         await env.TEMPLATE_CONFIG.put(`template-${id}`, JSON.stringify(templateData));
         return jsonResponse({ id, ...templateData });
     }
@@ -265,6 +276,24 @@ async function handleTemplatesAPI(request, env) {
     }
 
     return new Response('Method not allowed', { status: 405 });
+}
+
+// 处理单个模板详情API
+async function handleTemplateDetailAPI(request, env) {
+    const url = new URL(request.url);
+    const id = url.pathname.split('/').pop();
+
+    try {
+        const data = await env.TEMPLATE_CONFIG.get(`template-${id}`);
+        if (!data) {
+            return new Response('Template not found', { status: 404 });
+        }
+
+        const template = JSON.parse(data);
+        return jsonResponse({ id, ...template });
+    } catch (error) {
+        return new Response('Error fetching template', { status: 500 });
+    }
 }
 
 // 处理订阅生成API

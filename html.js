@@ -519,12 +519,50 @@ export function getHTML() {
                 <input type="text" id="template-desc" placeholder="简短描述">
             </div>
             <div class="form-group">
+                <label>输入方式</label>
+                <div class="format-buttons" style="margin-bottom: 15px;">
+                    <button type="button" class="format-btn active" onclick="switchInputMode('content')">直接输入内容</button>
+                    <button type="button" class="format-btn" onclick="switchInputMode('url')">远程链接</button>
+                </div>
+            </div>
+            <div class="form-group" id="template-content-group">
                 <label>规则内容</label>
                 <textarea id="template-content" placeholder="ruleset=🎯 全球直连,[]GEOIP,CN&#10;custom_proxy_group=..."></textarea>
+            </div>
+            <div class="form-group" id="template-url-group" style="display: none;">
+                <label>远程链接</label>
+                <input type="text" id="template-url" placeholder="https://example.com/rules.ini">
+                <small style="color: #a8a8b8; display: block; margin-top: 5px;">⚠️ 请确保链接可访问</small>
             </div>
             <div class="btn-group">
                 <button class="btn btn-primary" onclick="saveTemplate()">保存</button>
                 <button class="btn btn-secondary" onclick="closeModal('add-template-modal')">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 查看模板详情模态框 -->
+    <div id="view-template-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="view-template-title">模板详情</h2>
+                <button class="modal-close" onclick="closeModal('view-template-modal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>模板描述</label>
+                <p id="view-template-desc" style="color: #a8a8b8;"></p>
+            </div>
+            <div class="form-group" id="view-template-content-group" style="display: none;">
+                <label>规则内容</label>
+                <textarea id="view-template-content" readonly style="background: rgba(255,255,255,0.05);"></textarea>
+            </div>
+            <div class="form-group" id="view-template-url-group" style="display: none;">
+                <label>远程链接</label>
+                <input type="text" id="view-template-url" readonly style="background: rgba(255,255,255,0.05);">
+                <button class="btn btn-secondary" onclick="copyTemplateUrl()" style="margin-top: 10px;">复制链接</button>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="closeModal('view-template-modal')">关闭</button>
             </div>
         </div>
     </div>
@@ -624,6 +662,7 @@ export function getHTML() {
                             <div class="node-item-desc">\${template.description || '无描述'}</div>
                         </div>
                         <div class="node-item-actions">
+                            <button class="btn btn-secondary" onclick="viewTemplate('\${template.id}')" style="margin-right: 10px;">查看</button>
                             <button class="btn btn-danger" onclick="deleteTemplate('\${template.id}')">删除</button>
                         </div>
                     </div>
@@ -689,7 +728,75 @@ export function getHTML() {
 
         // 显示添加模板模态框
         function showAddTemplateModal() {
+            // 重置表单
+            document.getElementById('template-name').value = '';
+            document.getElementById('template-desc').value = '';
+            document.getElementById('template-content').value = '';
+            document.getElementById('template-url').value = '';
+            
+            // 默认显示内容输入模式
+            switchInputMode('content');
+            
             document.getElementById('add-template-modal').classList.add('active');
+        }
+
+        // 切换输入模式
+        function switchInputMode(mode) {
+            const contentGroup = document.getElementById('template-content-group');
+            const urlGroup = document.getElementById('template-url-group');
+            const buttons = document.querySelectorAll('#add-template-modal .format-btn');
+            
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event?.target?.classList.add('active');
+            
+            if (mode === 'content') {
+                contentGroup.style.display = 'block';
+                urlGroup.style.display = 'none';
+            } else {
+                contentGroup.style.display = 'none';
+                urlGroup.style.display = 'block';
+            }
+        }
+
+        // 查看模板详情
+        async function viewTemplate(id) {
+            try {
+                const response = await fetch('/api/templates/' + id);
+                const template = await response.json();
+                
+                document.getElementById('view-template-title').textContent = template.name;
+                document.getElementById('view-template-desc').textContent = template.description || '无描述';
+                
+                if (template.url) {
+                    // 显示 URL
+                    document.getElementById('view-template-content-group').style.display = 'none';
+                    document.getElementById('view-template-url-group').style.display = 'block';
+                    document.getElementById('view-template-url').value = template.url;
+                } else {
+                    // 显示内容
+                    document.getElementById('view-template-content-group').style.display = 'block';
+                    document.getElementById('view-template-url-group').style.display = 'none';
+                    document.getElementById('view-template-content').value = template.content || '';
+                }
+                
+                document.getElementById('view-template-modal').classList.add('active');
+            } catch (error) {
+                alert('加载模板失败：' + error.message);
+            }
+        }
+
+        // 复制模板 URL
+        function copyTemplateUrl() {
+            const input = document.getElementById('view-template-url');
+            input.select();
+            document.execCommand('copy');
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '已复制!';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
         }
 
         // 关闭模态框
@@ -745,23 +852,41 @@ export function getHTML() {
             const name = document.getElementById('template-name').value.trim();
             const description = document.getElementById('template-desc').value.trim();
             const content = document.getElementById('template-content').value.trim();
+            const url = document.getElementById('template-url').value.trim();
 
-            if (!name || !content) {
-                alert('请填写完整信息');
+            if (!name) {
+                alert('请填写模板名称');
+                return;
+            }
+
+            // 检查是否至少填写了内容或 URL
+            if (!content && !url) {
+                alert('请填写规则内容或远程链接');
                 return;
             }
 
             try {
+                const body = { name, description };
+                
+                if (url) {
+                    // 如果填写了 URL，保存 URL
+                    body.url = url;
+                } else {
+                    // 否则保存内容
+                    body.content = content;
+                }
+
                 await fetch('/api/templates', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, description, content })
+                    body: JSON.stringify(body)
                 });
 
                 closeModal('add-template-modal');
                 document.getElementById('template-name').value = '';
                 document.getElementById('template-desc').value = '';
                 document.getElementById('template-content').value = '';
+                document.getElementById('template-url').value = '';
                 loadTemplates();
             } catch (error) {
                 alert('保存失败：' + error.message);
