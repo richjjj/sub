@@ -1012,34 +1012,37 @@ overwrite_original_rules=true\`;
                 fixedSubs = await response.json();
                 
                 document.getElementById('fixed-sub-count').textContent = fixedSubs.length;
-                
-                // 更新固定订阅列表
-                const listHtml = fixedSubs.map(sub => {
-                    const formatText = sub.format === 'base64' ? '通用格式' : sub.format === 'clash' ? 'Clash' : 'Sing-Box';
-                    const baseUrl = window.location.origin;
-                    const url = \`\${baseUrl}/sub/\${sub.id}\`;
-                    
-                    return \`
-                    <div class="node-item">
-                        <div class="node-item-info">
-                            <div class="node-item-title">\${sub.name}</div>
-                            <div class="node-item-desc">格式：\${formatText} | 自动包含所有节点</div>
-                            <div style="margin-top: 8px;">
-                                <input type="text" readonly value="\${url}" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #a8a8b8; font-size: 12px; font-family: monospace;">
-                            </div>
-                        </div>
-                        <div class="node-item-actions">
-                            <button class="btn btn-secondary" onclick="copyFixedSubUrl('\${url}')" style="margin-right: 10px;">复制链接</button>
-                            <button class="btn btn-danger" onclick="deleteFixedSub('\${sub.id}')">删除</button>
-                        </div>
-                    </div>
-                \`;
-                }).join('');
-                
-                document.getElementById('fixed-subs-list').innerHTML = listHtml || '<div class="empty-state"><div class="empty-state-icon">🔗</div><p>暂无固定订阅</p></div>';
+                updateFixedSubsList();
             } catch (error) {
                 console.error('Failed to load fixed subscriptions:', error);
             }
+        }
+
+        // 更新固定订阅列表显示
+        function updateFixedSubsList() {
+            const listHtml = fixedSubs.map(sub => {
+                const formatText = sub.format === 'base64' ? '通用格式' : sub.format === 'clash' ? 'Clash' : 'Sing-Box';
+                const baseUrl = window.location.origin;
+                const url = \`\${baseUrl}/sub/\${sub.id}\`;
+                
+                return \`
+                <div class="node-item">
+                    <div class="node-item-info">
+                        <div class="node-item-title">\${sub.name}</div>
+                        <div class="node-item-desc">格式：\${formatText} | 自动包含所有节点</div>
+                        <div style="margin-top: 8px;">
+                            <input type="text" readonly value="\${url}" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #a8a8b8; font-size: 12px; font-family: monospace;">
+                        </div>
+                    </div>
+                    <div class="node-item-actions">
+                        <button class="btn btn-secondary" onclick="copyFixedSubUrl('\${url}')" style="margin-right: 10px;">复制链接</button>
+                        <button class="btn btn-danger" onclick="deleteFixedSub('\${sub.id}')">删除</button>
+                    </div>
+                </div>
+            \`;
+            }).join('');
+            
+            document.getElementById('fixed-subs-list').innerHTML = listHtml || '<div class="empty-state"><div class="empty-state-icon">🔗</div><p>暂无固定订阅</p></div>';
         }
 
         // 显示创建固定订阅模态框
@@ -1076,13 +1079,21 @@ overwrite_original_rules=true\`;
 
                 const result = await response.json();
 
+                // 乐观更新：立即添加到本地列表
+                fixedSubs.push(result);
+                document.getElementById('fixed-sub-count').textContent = fixedSubs.length;
+                
+                // 立即更新界面
+                updateFixedSubsList();
+
                 closeModal('add-fixed-sub-modal');
-                loadFixedSubs();
                 
                 // 显示成功消息
                 alert(\`订阅创建成功！\\n\\n链接：\${result.url}\\n\\n此链接会自动包含所有节点，无需每次更新。\`);
             } catch (error) {
                 alert('创建失败：' + error.message);
+                // 如果失败，重新加载列表
+                loadFixedSubs();
             }
         }
 
@@ -1114,10 +1125,25 @@ overwrite_original_rules=true\`;
         async function deleteFixedSub(id) {
             if (!confirm('确定要删除这个固定订阅吗？')) return;
 
+            // 保存原始数据，以便失败时恢复
+            const originalSubs = [...fixedSubs];
+
             try {
+                // 乐观更新：立即从本地列表移除
+                fixedSubs = fixedSubs.filter(sub => sub.id !== id);
+                document.getElementById('fixed-sub-count').textContent = fixedSubs.length;
+                
+                // 立即更新界面
+                updateFixedSubsList();
+
+                // 发送删除请求
                 await fetch('/api/fixed-subscriptions?id=' + id, { method: 'DELETE' });
-                loadFixedSubs();
             } catch (error) {
+                // 如果失败，恢复原始数据
+                fixedSubs = originalSubs;
+                document.getElementById('fixed-sub-count').textContent = fixedSubs.length;
+                updateFixedSubsList();
+                
                 alert('删除失败：' + error.message);
             }
         }
