@@ -42,6 +42,11 @@ export default {
             return handleConvertRequest(request, env);
         }
 
+        // 固定订阅链接（公开访问）
+        if (path.startsWith('/sub/')) {
+            return handleFixedSubscription(request, env);
+        }
+
         // 其他所有路由都需要验证
         const authResult = await verifyAuth(request, env);
         if (!authResult.authorized) {
@@ -70,6 +75,10 @@ export default {
 
         if (path === '/api/subscribe') {
             return handleSubscribeAPI(request, env);
+        }
+
+        if (path === '/api/fixed-subscriptions') {
+            return handleFixedSubscriptionsAPI(request, env);
         }
 
         return new Response('Not Found', { status: 404 });
@@ -332,6 +341,118 @@ async function handleSubscribeAPI(request, env) {
     };
 
     return jsonResponse({ links });
+}
+
+// 处理固定订阅 API
+async function handleFixedSubscriptionsAPI(request, env) {
+    const method = request.method;
+
+    // 获取所有固定订阅
+    if (method === 'GET') {
+        const list = await env.SUBLINK_KV.list({ prefix: 'fixed-sub-' });
+        const subscriptions = await Promise.all(
+            list.keys.map(async (key) => {
+                const data = await env.SUBLINK_KV.get(key.name);
+                return {
+                    id: key.name.replace('fixed-sub-', ''),
+                    ...JSON.parse(data)
+                };
+            })
+        );
+        return jsonResponse(subscriptions);
+    }
+
+    // 创建固定订阅
+    if (method === 'POST') {
+        const body = await request.json();
+        const id = generateId();
+        const subData = {
+            name: body.name,
+            format: body.format, // base64, clash, singbox
+            templateId: body.templateId || '',
+            createdAt: Date.now()
+        };
+        await env.SUBLINK_KV.put(`fixed-sub-${id}`, JSON.stringify(subData));
+
+        const baseUrl = new URL(request.url).origin;
+        const url = `${baseUrl}/sub/${id}`;
+
+        return jsonResponse({
+            id,
+            ...subData,
+            url
+        });
+    }
+
+    // 删除固定订阅
+    if (method === 'DELETE') {
+        const url = new URL(request.url);
+        const id = url.searchParams.get('id');
+        await env.SUBLINK_KV.delete(`fixed-sub-${id}`);
+        return jsonResponse({ success: true });
+    }
+
+    return new Response('Method not allowed', { status: 405 });
+}
+
+// 处理固定订阅访问（公开）
+async function handleFixedSubscription(request, env) {
+    const url = new URL(request.url);
+    const id = url.pathname.split('/').pop();
+
+    try {
+        // 获取固定订阅配置
+        const subData = await env.SUBLINK_KV.get(`fixed-sub-${id}`);
+        if (!subData) {
+            return new Response('Subscription not found', { status: 404 });
+        }
+
+        const config = JSON.parse(subData);
+
+        // 获取所有节点
+        const nodesList = await env.SUBLINK_KV.list({ prefix: 'nodes-' });
+        let allNodes = [];
+
+        for (const key of nodesList.keys) {
+            const data = await env.SUBLINK_KV.get(key.name);
+            if (data) {
+                const nodeData = JSON.parse(data);
+                allNodes = allNodes.concat(nodeData.nodes);
+            }
+        }
+
+        if (allNodes.length === 0) {
+            return new Response('No nodes available', { status: 404 });
+        }
+
+        // 生成临时内部 URL
+        const tempId = generateId();
+        await env.SUBLINK_KV.put(tempId, allNodes.join('\n'), { expirationTtl: 300 }); // 5分钟过期
+
+        const baseUrl = url.origin;
+        const nodeUrl = `http://inner.nodes.secret/id-${tempId}`;
+
+        let templateUrl = '';
+        if (config.templateId) {
+            templateUrl = `https://inner.template.secret/id-template-${config.templateId}`;
+        }
+
+        // 根据格式重定向到相应的转换端点
+        if (config.format === 'clash') {
+            const redirectUrl = `${baseUrl}/clash?url=${encodeURIComponent(nodeUrl)}${templateUrl ? '&template=' + encodeURIComponent(templateUrl) : ''}`;
+            return Response.redirect(redirectUrl, 302);
+        } else if (config.format === 'singbox') {
+            const redirectUrl = `${baseUrl}/singbox?url=${encodeURIComponent(nodeUrl)}${templateUrl ? '&template=' + encodeURIComponent(templateUrl) : ''}`;
+            return Response.redirect(redirectUrl, 302);
+        } else {
+            // base64
+            const redirectUrl = `${baseUrl}/base64?url=${encodeURIComponent(nodeUrl)}`;
+            return Response.redirect(redirectUrl, 302);
+        }
+    } catch (error) {
+        console.error('Fixed subscription error:', error);
+        return new Response('Internal Server Error: ' + error.message, { status: 500 });
+    }
 }
 
 function jsonResponse(data) {

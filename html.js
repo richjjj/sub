@@ -405,6 +405,7 @@ export function getHTML() {
 
         <div class="tabs">
             <button class="tab active" onclick="switchTab('generate')">生成订阅链接</button>
+            <button class="tab" onclick="switchTab('fixed')">固定订阅</button>
             <button class="tab" onclick="switchTab('nodes')">节点管理</button>
             <button class="tab" onclick="switchTab('templates')">规则模板</button>
         </div>
@@ -461,6 +462,23 @@ export function getHTML() {
                     <div class="empty-state">
                         <div class="empty-state-icon">📦</div>
                         <p>暂无节点</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 固定订阅 -->
+        <div id="tab-fixed" class="tab-content">
+            <div class="card">
+                <h2>固定订阅链接<span class="badge" id="fixed-sub-count">0</span></h2>
+                <p style="color: #a8a8b8; margin-bottom: 15px; font-size: 14px;">
+                    💡 创建固定链接后，无论增删节点，链接都不会变化，自动包含所有节点
+                </p>
+                <button class="btn btn-primary" onclick="showAddFixedSubModal()">+ 创建固定订阅</button>
+                <div id="fixed-subs-list" class="node-list" style="margin-top: 20px;">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔗</div>
+                        <p>暂无固定订阅</p>
                     </div>
                 </div>
             </div>
@@ -567,15 +585,52 @@ export function getHTML() {
         </div>
     </div>
 
+    <!-- 创建固定订阅模态框 -->
+    <div id="add-fixed-sub-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>创建固定订阅链接</h2>
+                <button class="modal-close" onclick="closeModal('add-fixed-sub-modal')">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>订阅名称</label>
+                <input type="text" id="fixed-sub-name" placeholder="例如：我的订阅">
+            </div>
+            <div class="form-group">
+                <label>订阅格式</label>
+                <select id="fixed-sub-format">
+                    <option value="base64">通用格式 (Base64)</option>
+                    <option value="clash">Clash</option>
+                    <option value="singbox">Sing-Box</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>规则模板（可选）</label>
+                <select id="fixed-sub-template">
+                    <option value="">默认模板</option>
+                </select>
+            </div>
+            <p style="color: #ffa726; font-size: 13px; margin-top: -10px; margin-bottom: 15px;">
+                💡 提示：创建后会自动包含所有节点，添加或删除节点后无需更改链接
+            </p>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="createFixedSub()">创建</button>
+                <button class="btn btn-secondary" onclick="closeModal('add-fixed-sub-modal')">取消</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let selectedFormat = 'base64';
         let nodes = [];
         let templates = [];
+        let fixedSubs = [];
 
         // 页面加载时初始化
         document.addEventListener('DOMContentLoaded', () => {
             loadNodes();
             loadTemplates();
+            loadFixedSubs();
             initFormatButtons();
         });
 
@@ -945,6 +1000,123 @@ overwrite_original_rules=true\`;
             try {
                 await fetch('/api/templates?id=' + id, { method: 'DELETE' });
                 loadTemplates();
+            } catch (error) {
+                alert('删除失败：' + error.message);
+            }
+        }
+
+        // 加载固定订阅列表
+        async function loadFixedSubs() {
+            try {
+                const response = await fetch('/api/fixed-subscriptions');
+                fixedSubs = await response.json();
+                
+                document.getElementById('fixed-sub-count').textContent = fixedSubs.length;
+                
+                // 更新固定订阅列表
+                const listHtml = fixedSubs.map(sub => {
+                    const formatText = sub.format === 'base64' ? '通用格式' : sub.format === 'clash' ? 'Clash' : 'Sing-Box';
+                    const baseUrl = window.location.origin;
+                    const url = \`\${baseUrl}/sub/\${sub.id}\`;
+                    
+                    return \`
+                    <div class="node-item">
+                        <div class="node-item-info">
+                            <div class="node-item-title">\${sub.name}</div>
+                            <div class="node-item-desc">格式：\${formatText} | 自动包含所有节点</div>
+                            <div style="margin-top: 8px;">
+                                <input type="text" readonly value="\${url}" style="width: 100%; padding: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #a8a8b8; font-size: 12px; font-family: monospace;">
+                            </div>
+                        </div>
+                        <div class="node-item-actions">
+                            <button class="btn btn-secondary" onclick="copyFixedSubUrl('\${url}')" style="margin-right: 10px;">复制链接</button>
+                            <button class="btn btn-danger" onclick="deleteFixedSub('\${sub.id}')">删除</button>
+                        </div>
+                    </div>
+                \`;
+                }).join('');
+                
+                document.getElementById('fixed-subs-list').innerHTML = listHtml || '<div class="empty-state"><div class="empty-state-icon">🔗</div><p>暂无固定订阅</p></div>';
+            } catch (error) {
+                console.error('Failed to load fixed subscriptions:', error);
+            }
+        }
+
+        // 显示创建固定订阅模态框
+        function showAddFixedSubModal() {
+            // 更新模板选择下拉框
+            const selectHtml = '<option value="">Nano (内置默认)</option>' + 
+                templates.map(t => \`<option value="\${t.id}">\${t.name}</option>\`).join('');
+            document.getElementById('fixed-sub-template').innerHTML = selectHtml;
+            
+            // 重置表单
+            document.getElementById('fixed-sub-name').value = '';
+            document.getElementById('fixed-sub-format').value = 'base64';
+            
+            document.getElementById('add-fixed-sub-modal').classList.add('active');
+        }
+
+        // 创建固定订阅
+        async function createFixedSub() {
+            const name = document.getElementById('fixed-sub-name').value.trim();
+            const format = document.getElementById('fixed-sub-format').value;
+            const templateId = document.getElementById('fixed-sub-template').value;
+
+            if (!name) {
+                alert('请填写订阅名称');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/fixed-subscriptions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, format, templateId })
+                });
+
+                const result = await response.json();
+
+                closeModal('add-fixed-sub-modal');
+                loadFixedSubs();
+                
+                // 显示成功消息
+                alert(\`订阅创建成功！\\n\\n链接：\${result.url}\\n\\n此链接会自动包含所有节点，无需每次更新。\`);
+            } catch (error) {
+                alert('创建失败：' + error.message);
+            }
+        }
+
+        // 复制固定订阅链接
+        function copyFixedSubUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '已复制!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                // 降级方案
+                const input = event.target.parentElement.parentElement.querySelector('input');
+                input.select();
+                document.execCommand('copy');
+                
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '已复制!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+
+        // 删除固定订阅
+        async function deleteFixedSub(id) {
+            if (!confirm('确定要删除这个固定订阅吗？')) return;
+
+            try {
+                await fetch('/api/fixed-subscriptions?id=' + id, { method: 'DELETE' });
+                loadFixedSubs();
             } catch (error) {
                 alert('删除失败：' + error.message);
             }
