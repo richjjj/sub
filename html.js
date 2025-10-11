@@ -394,6 +394,28 @@ export function getHTML() {
             font-size: 24px;
             cursor: pointer;
         }
+
+        /* 嵌套标签页样式 */
+        .subscription-content .tabs {
+            background: transparent;
+            padding: 0;
+            border: none;
+        }
+
+        .subscription-content .tab {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 0;
+        }
+
+        .subscription-content .tab.active {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            border-color: #27ae60;
+        }
+
+        .subscription-content .tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+        }
     </style>
 </head>
 <body>
@@ -404,51 +426,82 @@ export function getHTML() {
         </div>
 
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('generate')">生成订阅链接</button>
-            <button class="tab" onclick="switchTab('fixed')">固定订阅</button>
+            <button class="tab active" onclick="switchTab('subscription')">订阅管理</button>
             <button class="tab" onclick="switchTab('nodes')">节点管理</button>
             <button class="tab" onclick="switchTab('templates')">规则模板</button>
         </div>
 
-        <!-- 生成订阅链接 -->
-        <div id="tab-generate" class="tab-content active">
+        <!-- 订阅管理 -->
+        <div id="tab-subscription" class="tab-content active">
+            <!-- 订阅类型选择 -->
             <div class="card">
-                <h2>1. 选择订阅内容</h2>
-                <div id="node-selection" class="node-list">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📦</div>
-                        <p>加载节点中...</p>
+                <h2>订阅类型</h2>
+                <div class="tabs" style="margin-bottom: 20px;">
+                    <button class="tab active" onclick="switchSubscriptionType('temporary')" id="temporary-tab">临时订阅</button>
+                    <button class="tab" onclick="switchSubscriptionType('fixed')" id="fixed-tab">固定订阅</button>
+                </div>
+            </div>
+
+            <!-- 临时订阅 -->
+            <div id="temporary-subscription" class="subscription-content">
+                <div class="card">
+                    <h2>1. 选择订阅内容</h2>
+                    <p style="color: #a8a8b8; margin-bottom: 15px; font-size: 14px;">
+                        选择特定节点生成订阅链接，适合按需使用
+                    </p>
+                    <div id="node-selection" class="node-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📦</div>
+                            <p>加载节点中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>2. 选择规则模板（可选）</h2>
+                    <div class="form-group">
+                        <select id="template-select">
+                            <option value="">默认模板</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>3. 选择格式</h2>
+                    <div class="format-buttons">
+                        <button class="format-btn active" data-format="base64">通用格式<br>(Base64)</button>
+                        <button class="format-btn" data-format="clash">Clash</button>
+                        <button class="format-btn" data-format="singbox">Sing-Box</button>
+                    </div>
+
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="generateSubscription()">生成订阅链接</button>
+                    </div>
+
+                    <div id="result" class="result-box" style="display: none;">
+                        <h3>订阅链接：</h3>
+                        <div class="result-url">
+                            <input type="text" id="result-url" readonly>
+                            <button class="copy-btn" onclick="copyUrl()">复制</button>
+                            <button class="copy-btn" onclick="showResultQRCode()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📱 二维码</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card">
-                <h2>2. 选择规则模板（可选）</h2>
-                <div class="form-group">
-                    <select id="template-select">
-                        <option value="">默认模板</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>3. 选择格式</h2>
-                <div class="format-buttons">
-                    <button class="format-btn active" data-format="base64">通用格式<br>(Base64)</button>
-                    <button class="format-btn" data-format="clash">Clash</button>
-                    <button class="format-btn" data-format="singbox">Sing-Box</button>
-                </div>
-
-                <div class="btn-group">
-                    <button class="btn btn-primary" onclick="generateSubscription()">生成订阅链接</button>
-                </div>
-
-                <div id="result" class="result-box" style="display: none;">
-                    <h3>订阅链接：</h3>
-                    <div class="result-url">
-                        <input type="text" id="result-url" readonly>
-                        <button class="copy-btn" onclick="copyUrl()">复制</button>
-                        <button class="copy-btn" onclick="showResultQRCode()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">📱 二维码</button>
+            <!-- 固定订阅 -->
+            <div id="fixed-subscription" class="subscription-content" style="display: none;">
+                <div class="card">
+                    <h2>固定订阅链接<span class="badge" id="fixed-sub-count">0</span></h2>
+                    <p style="color: #a8a8b8; margin-bottom: 15px; font-size: 14px;">
+                        💡 创建固定链接后，无论增删节点，链接都不会变化，自动包含所有节点
+                    </p>
+                    <button class="btn btn-primary" onclick="showAddFixedSubModal()">+ 创建固定订阅</button>
+                    <div id="fixed-subs-list" class="node-list" style="margin-top: 20px;">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔗</div>
+                            <p>暂无固定订阅</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -468,23 +521,7 @@ export function getHTML() {
             </div>
         </div>
 
-        <!-- 固定订阅 -->
-        <div id="tab-fixed" class="tab-content">
-            <div class="card">
-                <h2>固定订阅链接<span class="badge" id="fixed-sub-count">0</span></h2>
-                <p style="color: #a8a8b8; margin-bottom: 15px; font-size: 14px;">
-                    💡 创建固定链接后，无论增删节点，链接都不会变化，自动包含所有节点
-                </p>
-                <button class="btn btn-primary" onclick="showAddFixedSubModal()">+ 创建固定订阅</button>
-                <div id="fixed-subs-list" class="node-list" style="margin-top: 20px;">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🔗</div>
-                        <p>暂无固定订阅</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        
         <!-- 规则模板 -->
         <div id="tab-templates" class="tab-content">
             <div class="card">
@@ -661,9 +698,27 @@ export function getHTML() {
         function switchTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
+
             event.target.classList.add('active');
             document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        // 切换订阅类型
+        function switchSubscriptionType(type) {
+            // 移除所有活动状态
+            document.getElementById('temporary-tab').classList.remove('active');
+            document.getElementById('fixed-tab').classList.remove('active');
+            document.getElementById('temporary-subscription').style.display = 'none';
+            document.getElementById('fixed-subscription').style.display = 'none';
+
+            // 设置新的活动状态
+            if (type === 'temporary') {
+                document.getElementById('temporary-tab').classList.add('active');
+                document.getElementById('temporary-subscription').style.display = 'block';
+            } else {
+                document.getElementById('fixed-tab').classList.add('active');
+                document.getElementById('fixed-subscription').style.display = 'block';
+            }
         }
 
         // 初始化格式按钮
