@@ -1,0 +1,28 @@
+{
+  "name": "subscription-manager",
+  "version": "1.0.0",
+  "description": "A subscription conversion and management service supporting multiple formats",
+  "main": "api/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required'",
+    "start": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@vercel/kv": "^1.0.1"
+  },
+  "devDependencies": {
+    "vercel": "^32.4.1"
+  },
+  "keywords": [
+    "subscription",
+    "clash",
+    "sing-box",
+    "base64",
+    "proxy"
+  ],
+  "author": "",
+  "license": "MIT"
+}
