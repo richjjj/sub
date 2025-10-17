@@ -18,34 +18,22 @@ export default async function handler(req, res) {
       SUBLINK_KV: process.env.KV_REST_API_URL ? {
         async get(key) {
           // Vercel KV implementation
-          const kv = await import('@vercel/kv').then(m => new m.KV({
-            url: process.env.KV_REST_API_URL,
-            token: process.env.KV_REST_API_TOKEN
-          }));
+          const { kv } = await import('@vercel/kv');
           return await kv.get(key);
         },
         async put(key, value, options) {
-          const kv = await import('@vercel/kv').then(m => new m.KV({
-            url: process.env.KV_REST_API_URL,
-            token: process.env.KV_REST_API_TOKEN
-          }));
+          const { kv } = await import('@vercel/kv');
           if (options?.expirationTtl) {
             return await kv.setex(key, options.expirationTtl, value);
           }
           return await kv.set(key, value);
         },
         async delete(key) {
-          const kv = await import('@vercel/kv').then(m => new m.KV({
-            url: process.env.KV_REST_API_URL,
-            token: process.env.KV_REST_API_TOKEN
-          }));
+          const { kv } = await import('@vercel/kv');
           return await kv.del(key);
         },
         async list(options) {
-          const kv = await import('@vercel/kv').then(m => new m.KV({
-            url: process.env.KV_REST_API_URL,
-            token: process.env.KV_REST_API_TOKEN
-          }));
+          const { kv } = await import('@vercel/kv');
           const keys = await kv.keys(options?.prefix + '*');
           return {
             keys: keys.map(name => ({ name }))
