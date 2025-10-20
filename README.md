@@ -108,3 +108,8 @@
   - `api/index.js` Vercel Edge 入口与 KV 适配
   - `vercel.json` 路由重写
 - 推荐在 Cloudflare Workers 模式下开发与调试（wrangler dev），Vercel 仅作为生产部署时的另一平台选择。
+
+## 六、架构决策（ADR）
+
+- ADR-0001：保持 Cloudflare Workers 架构，不迁移到 Next.js。详情见 `docs/ADR-0001-no-nextjs-migration.md`
+- 摘要：当前服务为轻量 API 与管理台，使用 Edge Function（Vercel）与 Cloudflare Workers 能满足需求；仅在前端复杂度显著增加或出现 SEO/多用户等诉求时，才考虑引入 Next.js（优先仅前端独立化）。
